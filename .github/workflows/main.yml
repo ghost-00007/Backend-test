@@ -13,7 +13,7 @@ env:
   GUNICORN_SERVICE: soucient_projectmanagementdev.service
   GUNICORN_SOCKET: soucient_projectmanagementdev.socket
   REQUIREMENTS_PATH: requirements.txt
-  MANAGE_PATH: src/
+  MANAGE_PATH: Backend/
 
 jobs:
   deploy:
