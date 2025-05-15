@@ -6,9 +6,8 @@ on:
       - main
 
 env:
-  APP_NAME: Backend
-  APP_DIR: /home/ec2-user/apps/  # Same as APP_DIR
   APP_NAME: soucient_projectmanagementdev
+  APP_DIR: /home/ec2-user/apps/
   WORKING_DIR: /home/ec2-user/apps/$APP_NAME
   GUNICORN_SERVICE: soucient_projectmanagementdev.service
   GUNICORN_SOCKET: soucient_projectmanagementdev.socket
@@ -43,28 +42,32 @@ jobs:
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}  # Replace with `password:` if using password
+        key: ${{ secrets.SERVER_SSH_KEY }}
         port: 22
-        envs: APP_NAME,APP_DIR,DEPLOY_DIR,GUNICORN_SERVICE,GUNICORN_SOCKET
-        
+        envs: APP_NAME,APP_DIR,WORKING_DIR,GUNICORN_SERVICE,GUNICORN_SOCKET
+        script: |
           echo "Deploying app: $APP_NAME"
 
           # Step 1: Ensure deployment directory exists
-          echo "Ensuring deployment directory at $DEPLOY_DIR"
-	  cd $APP_DIR
-          sudo mkdir -p $APP_DIR
-          sudo chown -R $USER:$USER $APP_DIR
+          echo "Ensuring deployment directory at $WORKING_DIR"
+          if [ ! -d "$WORKING_DIR" ]; then
+            echo "Directory does not exist. Creating it..."
+            sudo mkdir -p $WORKING_DIR
+            sudo chown -R $USER:$USER $WORKING_DIR
+          else
+            echo "Directory already exists. Skipping creation."
+          fi
 
           # Step 2: Pull latest code
-          if [ -d "$DEPLOY_DIR/.git" ]; then
+          if [ -d "$WORKING_DIR/.git" ]; then
             echo "Repo exists, pulling latest changes"
-            cd $DEPLOY_DIR
+            cd $WORKING_DIR
             git reset --hard HEAD
             git clean -fd
             git pull origin main
           else
-            echo "Cloning repo fresh into $DEPLOY_DIR"
-            git clone https://github.com/${{ github.repository }} $DEPLOY_DIR
+            echo "Cloning repo fresh into $WORKING_DIR"
+            git clone https://github.com/${{ github.repository }} $WORKING_DIR
           fi
 
           # Step 3: Create and activate virtual environment inside the app dir
