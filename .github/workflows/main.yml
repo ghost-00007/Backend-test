@@ -46,7 +46,7 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}  # Replace with `password:` if using password
         port: 22
         envs: APP_NAME,APP_DIR,DEPLOY_DIR,GUNICORN_SERVICE,GUNICORN_SOCKET
-        script: |
+        
           echo "Deploying app: $APP_NAME"
 
           # Step 1: Ensure deployment directory exists
