@@ -19,7 +19,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # <--- Run on your private self-hosted runner
 
     steps:
       - name: Checkout code
@@ -30,78 +30,65 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies locally (for test only)
+      - name: Install dependencies (optional test)
         run: |
           python -m pip install --upgrade pip
           pip install -r ${{ env.REQUIREMENTS_PATH }}
 
-      - name: Deploy to Ubuntu Server using SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: 22
-          envs: APP_NAME,APP_DIR,DEPLOY_DIR,WORKING_DIR,GUNICORN_SERVICE,GUNICORN_SOCKET,NGINX_CONF_SRC,NGINX_CONF_DEST
-          script: |
-            echo "Ensuring deployment directory at $DEPLOY_DIR"
-            if [ ! -d "$DEPLOY_DIR" ]; then
-              echo "Directory $DEPLOY_DIR does not exist. Creating it..."
-              sudo mkdir -p "$DEPLOY_DIR"
-              sudo chmod -R 777 "$DEPLOY_DIR"
-            else
-              echo "Directory $DEPLOY_DIR already exists. Skipping creation."
-            fi
+      - name: Deploy Django App
+        run: |
+          echo "Ensuring deployment directory at $DEPLOY_DIR"
+          if [ ! -d "$DEPLOY_DIR" ]; then
+            echo "Directory $DEPLOY_DIR does not exist. Creating it..."
+            sudo mkdir -p "$DEPLOY_DIR"
+            sudo chmod -R 777 "$DEPLOY_DIR"
+          else
+            echo "Directory $DEPLOY_DIR already exists. Skipping creation."
+          fi
 
-            # Step 2: Pull latest code
-            if [ -d "$DEPLOY_DIR/.git" ]; then
-              echo "Repo exists, pulling latest changes"
-              cd $DEPLOY_DIR
-              git reset --hard HEAD
-              git clean -fd
-              git pull origin main
-            else
-              echo "Cloning repo fresh into $DEPLOY_DIR"
-              git clone https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} $DEPLOY_DIR
-            fi
+          if [ -d "$DEPLOY_DIR/.git" ]; then
+            echo "Repo exists, pulling latest changes"
+            cd $DEPLOY_DIR
+            git reset --hard HEAD
+            git clean -fd
+            git pull origin main
+          else
+            echo "Cloning repo fresh into $DEPLOY_DIR"
+            git clone https://github.com/${{ github.repository }} $DEPLOY_DIR
+          fi
 
-            # Step 3: Create and activate virtual environment inside the app dir
-            cd $WORKING_DIR
-            if [ ! -d "venv" ]; then
-              echo "Creating virtual environment"
-              python3 -m venv venv
-            fi
-            source venv/bin/activate
+          cd $WORKING_DIR
+          if [ ! -d "venv" ]; then
+            echo "Creating virtual environment"
+            python3 -m venv venv
+          fi
+          source venv/bin/activate
 
-            echo "Installing dependencies"
-            pip install --upgrade pip
-            pip install -r requirements.txt
+          echo "Installing dependencies"
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-            # Step 4: Django DB migrations and static files
-            cd $DEPLOY_DIR/Backend/
-            python manage.py makemigrations
-            python manage.py migrate
-            python manage.py collectstatic --noinput
+          cd $DEPLOY_DIR/Backend/
+          python manage.py makemigrations
+          python manage.py migrate
+          python manage.py collectstatic --noinput
 
-            # Step 5: Copy and restart Gunicorn service and socket
-            echo "Reloading Gunicorn services"
-            sudo cp /home/ec2-user/service/$GUNICORN_SERVICE /etc/systemd/system/
-            sudo cp /home/ec2-user/service/$GUNICORN_SOCKET /etc/systemd/system/
-            sudo systemctl daemon-reload
-            sudo systemctl enable $GUNICORN_SOCKET
-            sudo systemctl restart $GUNICORN_SERVICE
+          echo "Reloading Gunicorn services"
+          sudo cp /home/ec2-user/service/$GUNICORN_SERVICE /etc/systemd/system/
+          sudo cp /home/ec2-user/service/$GUNICORN_SOCKET /etc/systemd/system/
+          sudo systemctl daemon-reload
+          sudo systemctl enable $GUNICORN_SOCKET
+          sudo systemctl restart $GUNICORN_SERVICE
 
-            # Step 6: Setup and reload Nginx
-            echo "Copying Nginx config"
-            sudo cp $NGINX_CONF_SRC $NGINX_CONF_DEST
+          echo "Copying Nginx config"
+          sudo cp $NGINX_CONF_SRC $NGINX_CONF_DEST
 
-            echo "Creating symlink for Nginx config if it doesn't exist"
-            if [ ! -L /etc/nginx/sites-enabled/ ]; then
-              sudo ln -s $NGINX_CONF_DEST /etc/nginx/sites-enabled/
-            else
-              echo "Nginx symlink already exists. Skipping."
-            fi
+          if [ ! -L /etc/nginx/sites-enabled/ ]; then
+            sudo ln -s $NGINX_CONF_DEST /etc/nginx/sites-enabled/
+          else
+            echo "Nginx symlink already exists. Skipping."
+          fi
 
-            echo "Testing and restarting Nginx"
-            sudo nginx -t
-            sudo systemctl restart nginx
+          echo "Testing and restarting Nginx"
+          sudo nginx -t
+          sudo systemctl restart nginx
