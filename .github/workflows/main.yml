@@ -44,9 +44,6 @@ jobs:
           port: 22
           envs: APP_NAME,APP_DIR,DEPLOY_DIR,WORKING_DIR,GUNICORN_SERVICE,GUNICORN_SOCKET,NGINX_CONF_SRC,NGINX_CONF_DEST
           script: |
-            echo "Deploying app: $APP_NAME"
-
-            # Step 1: Ensure deployment directory exists
             echo "Ensuring deployment directory at $DEPLOY_DIR"
             if [ ! -d "$DEPLOY_DIR" ]; then
               echo "Directory $DEPLOY_DIR does not exist. Creating it..."
