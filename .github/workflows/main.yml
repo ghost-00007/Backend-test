@@ -6,87 +6,99 @@ on:
       - main
 
 env:
-  APP_NAME: soucient_projectmanagementdev
   APP_DIR: /home/ec2-user/apps/
+  APP_NAME: soucient_projectmanagementdev
   WORKING_DIR: /home/ec2-user/apps/$APP_NAME
+  DEPLOY_DIR: /home/ec2-user/apps/${{ env.APP_NAME }}
   GUNICORN_SERVICE: soucient_projectmanagementdev.service
   GUNICORN_SOCKET: soucient_projectmanagementdev.socket
   REQUIREMENTS_PATH: requirements.txt
-  MANAGE_PATH: Backend/
+  MANAGE_PATH: $DEPLOY_DIR/Backend/
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies locally (for test only)
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r ${{ env.REQUIREMENTS_PATH }}
+      - name: Install dependencies locally (for test only)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ${{ env.REQUIREMENTS_PATH }}
 
-    - name: Run Django tests
-      run: |
-        cd ${{ env.MANAGE_PATH }}
-        python manage.py test
+      - name: Run Django tests
+        run: |
+          cd ${{ env.MANAGE_PATH }}
+          python manage.py test
 
+      - name: Deploy to Ubuntu Server using SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          envs: APP_NAME,APP_DIR,DEPLOY_DIR,GUNICORN_SERVICE,GUNICORN_SOCKET
+          script: |
+            echo "Deploying app: $APP_NAME"
 
+            # Step 1: Ensure deployment directory exists
+            echo "Ensuring deployment directory at $DEPLOY_DIR"
 
-          # Step 1: Ensure deployment directory exists
-          echo "Ensuring deployment directory at $WORKING_DIR"
-          if [ ! -d "$WORKING_DIR" ]; then
-            echo "Directory does not exist. Creating it..."
-            sudo mkdir -p $WORKING_DIR
-            sudo chown -R $USER:$USER $WORKING_DIR
-          else
-            echo "Directory already exists. Skipping creation."
-          fi
+            if [ ! -d "$DEPLOY_DIR" ]; then
+              echo "Directory $DEPLOY_DIR does not exist. Creating it..."
+              sudo mkdir -p "$DEPLOY_DIR"
+              sudo chmod -R 777 "$DEPLOY_DIR"
+            else
+              echo "Directory $DEPLOY_DIR already exists. Skipping creation."
+            fi
 
-          # Step 2: Pull latest code
-          if [ -d "$WORKING_DIR/.git" ]; then
-            echo "Repo exists, pulling latest changes"
+            # Step 2: Pull latest code
+            if [ -d "$DEPLOY_DIR/.git" ]; then
+              echo "Repo exists, pulling latest changes"
+              cd $DEPLOY_DIR
+              git reset --hard HEAD
+              git clean -fd
+              git pull origin main
+            else
+              echo "Cloning repo fresh into $DEPLOY_DIR"
+              git clone https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} $DEPLOY_DIR
+            fi
+
+            # Step 3: Create and activate virtual environment inside the app dir
             cd $WORKING_DIR
-            git reset --hard HEAD
-            git clean -fd
-            git pull origin main
-          else
-            echo "Cloning repo fresh into $WORKING_DIR"
-            git clone https://github.com/${{ github.repository }} $WORKING_DIR
-          fi
+            if [ ! -d "venv" ]; then
+              echo "Creating virtual environment"
+              python3 -m venv venv
+            fi
+            source venv/bin/activate
 
-          # Step 3: Create and activate virtual environment inside the app dir
-          cd $WORKING_DIR
-          if [ ! -d "venv" ]; then
-            echo "Creating virtual environment"
-            python3 -m venv venv
-          fi
-          source venv/bin/activate
+            echo "Installing dependencies"
+            pip install --upgrade pip
+            pip install -r requirements.txt
 
-          echo "Installing dependencies"
-          pip install --upgrade pip
-          pip install -r requirements.txt
+            # Step 4: Django DB migrations and static files
+            cd $DEPLOY_DIR/Backend/
+            python manage.py makemigrations
+            python manage.py migrate
+            python manage.py collectstatic --noinput
 
-          # Step 4: Django DB migrations and static files
-          cd src
-          python manage.py makemigrations
-          python manage.py migrate
-          python manage.py collectstatic --noinput
+            # Step 5: Copy and restart Gunicorn service and socket
+            echo "Reloading Gunicorn services"
+            sudo cp /home/ec2-user/service/$GUNICORN_SERVICE /etc/systemd/system/
+            sudo cp /home/ec2-user/service/$GUNICORN_SOCKET /etc/systemd/system/
+            sudo systemctl daemon-reload
+            sudo systemctl enable $GUNICORN_SOCKET
+            sudo systemctl restart $GUNICORN_SERVICE
 
-          # Step 5: Copy and restart Gunicorn service and socket
-          echo "Reloading Gunicorn services"
-          sudo cp /home/ec2-user/service/$GUNICORN_SERVICE /etc/systemd/system/
-          sudo cp /home/ec2-user/service/$GUNICORN_SOCKET /etc/systemd/system/
-          sudo systemctl daemon-reload
-          sudo systemctl restart $GUNICORN_SERVICE
-
-          # Step 6: Validate and restart Nginx
-          echo "Restarting Nginx"
-          sudo nginx -t
-          sudo systemctl restart nginx
+            # Step 6: Validate and restart Nginx
+            echo "Restarting Nginx"
+            sudo nginx -t
+            sudo systemctl restart nginx
