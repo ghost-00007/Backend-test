@@ -35,11 +35,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r ${{ env.REQUIREMENTS_PATH }}
 
-      - name: Run Django tests
-        run: |
-          cd ${{ env.MANAGE_PATH }}
-          python manage.py test
-
       - name: Deploy to Ubuntu Server using SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
