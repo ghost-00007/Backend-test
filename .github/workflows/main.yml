@@ -25,11 +25,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install dependencies (optional test)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r ${{ env.REQUIREMENTS_PATH }}
-
       - name: Deploy Django App
         run: |
           echo "Ensuring deployment directory at $DEPLOY_DIR"
