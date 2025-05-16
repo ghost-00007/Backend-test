@@ -8,12 +8,13 @@ on:
 env:
   APP_DIR: /home/ec2-user/apps/
   APP_NAME: soucient_projectmanagementdev
-  WORKING_DIR: /home/ec2-user/apps/$APP_NAME
-  DEPLOY_DIR: /home/ec2-user/apps/${{ env.APP_NAME }}
+  WORKING_DIR: /home/ec2-user/apps/soucient_projectmanagementdev
+  DEPLOY_DIR: /home/ec2-user/apps/soucient_projectmanagementdev
   GUNICORN_SERVICE: soucient_projectmanagementdev.service
   GUNICORN_SOCKET: soucient_projectmanagementdev.socket
   REQUIREMENTS_PATH: requirements.txt
-  MANAGE_PATH: $DEPLOY_DIR/Backend/
+  MANAGE_PATH: /home/ec2-user/apps/soucient_projectmanagementdev/Backend/
+
 
 jobs:
   deploy:
