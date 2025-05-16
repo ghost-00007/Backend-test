@@ -53,12 +53,12 @@ jobs:
             python3 -m venv venv
           fi
           source venv/bin/activate
-
+           
           echo "Installing dependencies"
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          cd $DEPLOY_DIR/Backend/
+          
           python manage.py makemigrations
           python manage.py migrate
           python manage.py collectstatic --noinput
